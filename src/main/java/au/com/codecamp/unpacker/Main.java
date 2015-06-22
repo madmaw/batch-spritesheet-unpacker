@@ -40,12 +40,16 @@ public class Main {
         @Parameter(names = "-chunk", description = "maximum number of sprites per sheet", required = false)
         private Integer chunkSize;
 
+        @Parameter(names = "-maxHeight", description = "scale anything above this height down", required = false)
+        private Integer maxHeight;
+
         public CommandLineParameters(String targetDirectory) {
             this.targetDirectory = targetDirectory;
             this.pad = 0;
             this.minStdDev = null;
             this.maxStdDev = null;
             this.chunkSize = null;
+            this.maxHeight = null;
         }
 
         public String getTargetDirectory() {
@@ -70,6 +74,10 @@ public class Main {
 
         public Integer getChunkSize() {
             return this.chunkSize;
+        }
+
+        public Integer getMaxHeight() {
+            return maxHeight;
         }
     }
 
@@ -170,7 +178,7 @@ public class Main {
                 outputDir.mkdirs();
                 System.out.println("converting "+commonPath+" ...");
                 try {
-                    convert(inputFile, outputDir, parameters.getPad(), parameters.getMinStdDev(), parameters.getMaxStdDev(), parameters.getChunkSize());
+                    convert(inputFile, outputDir, parameters.getPad(), parameters.getMinStdDev(), parameters.getMaxStdDev(), parameters.getChunkSize(), parameters.getMaxHeight());
                 } catch( Exception ex ) {
                     System.err.println("unable to convert "+commonPath);
                     ex.printStackTrace();
@@ -179,7 +187,7 @@ public class Main {
         }
     }
 
-    public static final void convert(File inputFile, File outputDir, int pad, Float minStdDev, Float maxStdDev, Integer chunkSize) throws Exception {
+    public static final void convert(File inputFile, File outputDir, int pad, Float minStdDev, Float maxStdDev, Integer chunkSize, Integer maxScaledHeight) throws Exception {
         // read in an image
         BufferedImage input = ImageIO.read(inputFile);
         // convert to ARGB
@@ -291,6 +299,7 @@ public class Main {
             chunkSize = boxes.size();
         }
         int position = 0;
+        int fileCount = 0;
         while( position < boxes.size() ) {
 
             int remaining = Math.min(chunkSize, boxes.size() - position);
@@ -320,6 +329,7 @@ public class Main {
                 count++;
                 position++;
             }
+            fileCount++;
 
             String fileName = inputFile.getName();
             // remove any '.' character
@@ -327,7 +337,19 @@ public class Main {
             if( index >= 0 ) {
                 fileName = fileName.substring(0, index);
             }
-            fileName += "_"+position+"_c" + remaining+".png";
+            fileName += "_"+fileCount+"_c" + remaining+".png";
+
+            if( maxScaledHeight != null && maxScaledHeight < maxHeight ) {
+                // scale it down
+                int scaledWidth = (output.getWidth() * maxScaledHeight) / output.getHeight();
+                BufferedImage scaledImage = new BufferedImage(scaledWidth, maxScaledHeight, BufferedImage.TYPE_INT_ARGB);
+                Graphics2D scaledGraphics = (Graphics2D)scaledImage.getGraphics();
+                scaledGraphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                scaledGraphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                scaledGraphics.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
+                scaledGraphics.drawImage(output, 0, 0, scaledWidth, maxScaledHeight, null);
+                output = scaledImage;
+            }
 
             File outputFile = new File(outputDir, fileName);
             ImageIO.write(output, "PNG", outputFile);
